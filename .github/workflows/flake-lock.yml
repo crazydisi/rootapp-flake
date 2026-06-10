@@ -27,9 +27,6 @@ jobs:
             experimental-features = nix-command flakes
             accept-flake-config = true
 
-      - name: Cache Nix store
-        uses: DeterminateSystems/magic-nix-cache-action@v8
-
       - name: Update flake.lock and open PR
         uses: DeterminateSystems/update-flake-lock@v25
         with:

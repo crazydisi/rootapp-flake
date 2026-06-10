@@ -29,9 +29,6 @@ jobs:
             experimental-features = nix-command flakes
             accept-flake-config = true
 
-      - name: Cache Nix store
-        uses: DeterminateSystems/magic-nix-cache-action@v8
-
       - name: Check for updates
         id: update
         run: |

@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31
@@ -28,7 +28,7 @@ jobs:
             accept-flake-config = true
 
       - name: Update flake.lock and open PR
-        uses: DeterminateSystems/update-flake-lock@v25
+        uses: DeterminateSystems/update-flake-lock@v28
         with:
           pr-title: "chore: bump flake.lock"
           pr-labels: dependencies

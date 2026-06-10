@@ -1,0 +1,38 @@
+name: Update flake.lock
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: rootapp-flake-lock
+  cancel-in-progress: false
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: Cache Nix store
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Update flake.lock and open PR
+        uses: DeterminateSystems/update-flake-lock@v25
+        with:
+          pr-title: "chore: bump flake.lock"
+          pr-labels: dependencies
+          commit-msg: "chore: bump flake.lock"

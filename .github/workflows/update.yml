@@ -1,0 +1,102 @@
+name: RootApp Auto-Update
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: rootapp-auto-update
+  cancel-in-progress: false
+
+env:
+  NIXPKGS_ALLOW_UNFREE: "1"
+
+jobs:
+  update-flake:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: Cache Nix store
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Check for updates
+        id: update
+        run: |
+          set -euo pipefail
+
+          declare -A URLS=(
+            [x86_64-linux]="https://installer.rootapp.com/installer/Linux/X64/Root.AppImage"
+            [aarch64-linux]="https://installer.rootapp.com/installer/Linux/Arm64/Root.AppImage"
+          )
+
+          changed=0
+          summary=""
+
+          # Bump per-architecture hashes.
+          for system in "${!URLS[@]}"; do
+            url="${URLS[$system]}"
+            new_hash=$(nix store prefetch-file "$url" --json | jq -r .hash)
+            old_hash=$(grep -A2 "$system = {" flake.nix | grep -oP 'hash = "\K[^"]+' || true)
+
+            echo "system=$system old=$old_hash new=$new_hash"
+
+            if [ "$old_hash" != "$new_hash" ]; then
+              sed -i "s|$old_hash|$new_hash|g" flake.nix
+              changed=1
+              summary="${summary}- ${system}: ${new_hash}"$'\n'
+            fi
+          done
+
+          # Bump the `version` field from upstream Last-Modified (x86_64 is canonical).
+          last_modified=$(curl -sI "${URLS[x86_64-linux]}" | grep -i '^last-modified:' | sed 's/^[Ll]ast-[Mm]odified: //I; s/\r$//')
+          new_version="unstable-$(date -u -d "$last_modified" +%Y-%m-%d)"
+          old_version=$(grep -oP 'version = "\K[^"]+' flake.nix)
+
+          echo "version old=$old_version new=$new_version"
+
+          if [ "$old_version" != "$new_version" ]; then
+            sed -i "s|version = \"$old_version\"|version = \"$new_version\"|" flake.nix
+            changed=1
+            summary="${summary}- version: ${new_version}"$'\n'
+          fi
+
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          {
+            echo "summary<<EOF"
+            echo "$summary"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify build
+        if: steps.update.outputs.changed == '1'
+        run: |
+          nix flake check --no-build --impure
+          nix build .#packages.x86_64-linux.rootapp --impure --print-build-logs
+
+      - name: Commit and push
+        if: steps.update.outputs.changed == '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git add flake.nix
+          git commit -m "chore: auto-update RootApp AppImage" \
+                     -m "${{ steps.update.outputs.summary }}"
+          git push
+
+      - name: No-op log
+        if: steps.update.outputs.changed != '1'
+        run: echo "AppImages and version are up to date."

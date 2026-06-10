@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: rootapp-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NIXPKGS_ALLOW_UNFREE: "1"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: Cache Nix store
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Format check
+        run: nix fmt -- --check flake.nix
+
+      - name: Flake check
+        run: nix flake check --impure --print-build-logs
+
+      - name: Build x86_64-linux
+        run: nix build .#packages.x86_64-linux.rootapp --impure --print-build-logs

@@ -23,10 +23,10 @@ Upstream ships a single AppImage and no `.deb`, `.rpm`, or Flatpak. This flake w
 Try it once without installing:
 
 ```sh
-nix run --impure github:crazydisi/rootapp-flake
+nix run github:crazydisi/rootapp-flake
 ```
 
-> `--impure` is required because RootApp ships as a closed-source AppImage, marked `license.unfree` in this flake's `meta`. See [Allowing unfree](#allowing-unfree) below.
+> RootApp ships as a closed-source AppImage and the derivation is marked `meta.license = unfree`. The flake configures `allowUnfree` internally on its own `pkgs` instance, so consumers don't need to set anything to evaluate or build it. Adding this flake as an input is implicit consent.
 
 ## Install
 
@@ -50,7 +50,6 @@ Adds the package and a typed option set under `programs.rootapp`.
         rootapp.nixosModules.default
         ({ ... }: {
           programs.rootapp.enable = true;
-          nixpkgs.config.allowUnfree = true;
         })
       ];
     };
@@ -70,7 +69,6 @@ Adds the package and a typed option set under `programs.rootapp`.
         rootapp.homeManagerModules.default
         ({ ... }: {
           programs.rootapp.enable = true;
-          nixpkgs.config.allowUnfree = true;
         })
       ];
     };
@@ -98,18 +96,16 @@ environment.systemPackages = [
 ### Ad-hoc shell
 
 ```sh
-nix shell --impure github:crazydisi/rootapp-flake
+nix shell github:crazydisi/rootapp-flake
 ```
 
-## Allowing unfree
+## Unfree status
 
-The wrapped binary is closed-source, so the derivation's `meta.license` is `unfree`. Choose **one** of:
+The wrapped binary is closed-source (`meta.license = unfree`). To avoid forcing every consumer to fiddle with `allowUnfree`, the flake imports its own `nixpkgs` with `config.allowUnfree = true;` internally. Practical implications:
 
-| Context              | What to set                                                                |
-|----------------------|----------------------------------------------------------------------------|
-| NixOS / Home Manager | `nixpkgs.config.allowUnfree = true;`                                       |
-| Scoped allowlist     | `nixpkgs.config.allowUnfreePredicate = pkg: lib.getName pkg == "rootapp";` |
-| Ad-hoc CLI           | `export NIXPKGS_ALLOW_UNFREE=1` and pass `--impure`                        |
+- `nix run`, `nix shell`, `nix build`, and consuming the flake as an input all work with no extra config.
+- Your host's `nixpkgs.config.allowUnfree` setting is independent — it stays whatever you have it set to.
+- Adding this flake as an input is implicit consent to install the unfree binary.
 
 ## How auto-update works
 
@@ -139,9 +135,9 @@ Paste the results into the matching `hash = "..."` lines in [flake.nix](./flake.
 ```sh
 nix develop          # nixpkgs-fmt, jq, gnused, curl
 nix fmt              # format flake.nix
-nix flake check --impure
-nix build .#packages.x86_64-linux.rootapp --impure
-nix run --impure
+nix flake check
+nix build .#packages.x86_64-linux.rootapp
+nix run
 ```
 
 ## Repository layout

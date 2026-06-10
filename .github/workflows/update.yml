@@ -9,9 +9,6 @@ concurrency:
   group: rootapp-auto-update
   cancel-in-progress: false
 
-env:
-  NIXPKGS_ALLOW_UNFREE: "1"
-
 jobs:
   update-flake:
     runs-on: ubuntu-latest
@@ -80,8 +77,8 @@ jobs:
       - name: Verify build
         if: steps.update.outputs.changed == '1'
         run: |
-          nix flake check --no-build --impure
-          nix build .#packages.x86_64-linux.rootapp --impure --print-build-logs
+          nix flake check --no-build
+          nix build .#packages.x86_64-linux.rootapp --print-build-logs
 
       - name: Commit and push
         if: steps.update.outputs.changed == '1'

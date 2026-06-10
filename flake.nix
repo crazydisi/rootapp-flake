@@ -67,9 +67,18 @@
         };
     in
     {
+      # Build with allowUnfree set internally so consumers don't need to
+      # configure `nixpkgs.config.allowUnfree` just to evaluate this input.
+      # The wrapped binary is RootApp's own closed-source AppImage — anyone
+      # adding this flake as an input is implicitly opting in to that.
       packages = forAllSystems (system:
-        let pkgs = nixpkgs.legacyPackages.${system};
-        in rec {
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+          };
+        in
+        rec {
           rootapp = mkRootapp pkgs;
           default = rootapp;
         });

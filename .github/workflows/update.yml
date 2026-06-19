@@ -85,10 +85,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
           git add flake.nix
           git commit -m "chore: auto-update RootApp AppImage" \
                      -m "${{ steps.update.outputs.summary }}"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
 
       - name: No-op log

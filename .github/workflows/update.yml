@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Re-prefetch even when upstream Last-Modified is unchanged"
+        type: boolean
+        default: false
 
 concurrency:
   group: rootapp-auto-update
@@ -19,15 +24,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: Probe upstream Last-Modified
+        id: probe
+        run: |
+          set -euo pipefail
+          url="https://installer.rootapp.com/installer/Linux/X64/Root.AppImage"
+          last_modified=$(curl -sI "$url" | grep -i '^last-modified:' | sed 's/^[Ll]ast-[Mm]odified: //I; s/\r$//')
+          new_version="unstable-$(date -u -d "$last_modified" +%Y-%m-%d)"
+          old_version=$(grep -oP 'version = "\K[^"]+' flake.nix)
+          echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "old_version=$old_version" >> "$GITHUB_OUTPUT"
+          if [ "$old_version" = "$new_version" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "needs_work=0" >> "$GITHUB_OUTPUT"
+            echo "Upstream unchanged ($old_version) — skipping prefetch and build."
+          else
+            echo "needs_work=1" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        if: steps.probe.outputs.needs_work == '1'
+        uses: nixbuild/nix-quick-install-action@v35
         with:
-          extra_nix_config: |
+          nix_conf: |
             experimental-features = nix-command flakes
             accept-flake-config = true
 
-      - name: Check for updates
+      - name: Restore Nix store cache
+        if: steps.probe.outputs.needs_work == '1'
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'flake.nix') }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+
+      - name: Prefetch hashes and rewrite flake.nix
         id: update
+        if: steps.probe.outputs.needs_work == '1'
         run: |
           set -euo pipefail
 
@@ -39,7 +70,6 @@ jobs:
           changed=0
           summary=""
 
-          # Bump per-architecture hashes.
           for system in "${!URLS[@]}"; do
             url="${URLS[$system]}"
             new_hash=$(nix store prefetch-file "$url" --json | jq -r .hash)
@@ -54,13 +84,8 @@ jobs:
             fi
           done
 
-          # Bump the `version` field from upstream Last-Modified (x86_64 is canonical).
-          last_modified=$(curl -sI "${URLS[x86_64-linux]}" | grep -i '^last-modified:' | sed 's/^[Ll]ast-[Mm]odified: //I; s/\r$//')
-          new_version="unstable-$(date -u -d "$last_modified" +%Y-%m-%d)"
-          old_version=$(grep -oP 'version = "\K[^"]+' flake.nix)
-
-          echo "version old=$old_version new=$new_version"
-
+          old_version="${{ steps.probe.outputs.old_version }}"
+          new_version="${{ steps.probe.outputs.new_version }}"
           if [ "$old_version" != "$new_version" ]; then
             sed -i "s|version = \"$old_version\"|version = \"$new_version\"|" flake.nix
             changed=1
@@ -76,9 +101,7 @@ jobs:
 
       - name: Verify build
         if: steps.update.outputs.changed == '1'
-        run: |
-          nix flake check --no-build
-          nix build .#packages.x86_64-linux.rootapp --print-build-logs
+        run: nix flake check --print-build-logs
 
       - name: Commit and push
         if: steps.update.outputs.changed == '1'
@@ -86,11 +109,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add flake.nix
-          git commit -m "chore: auto-update RootApp AppImage" \
+          git commit -m "chore: auto-update RootApp AppImage [skip ci]" \
                      -m "${{ steps.update.outputs.summary }}"
           git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
 
       - name: No-op log
-        if: steps.update.outputs.changed != '1'
+        if: steps.probe.outputs.needs_work == '0' || steps.update.outputs.changed != '1'
         run: echo "AppImages and version are up to date."

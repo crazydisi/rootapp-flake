@@ -10,16 +10,16 @@
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
-      version = "unstable-2026-11-03";
+      version = "unstable-2026-11-05";
 
       sources = {
         x86_64-linux = {
           url = "https://installer.rootapp.com/installer/Linux/X64/Root.AppImage";
-          hash = "sha256-GZtKqWkfFGtfMAKIWnIyTjq8GD/lm2dv0SC3nW5WrnE=";
+          hash = "sha256-Lm9QWm2mCVKJOlEaYYVEyxh1sSo0nZYvSOUAarKk160=";
         };
         aarch64-linux = {
           url = "https://installer.rootapp.com/installer/Linux/Arm64/Root.AppImage";
-          hash = "sha256-rAeRQ6YrSNL0lKvnQT9L90jeamtGUYMUUmsrttgEQM4=";
+          hash = "sha256-fgeipXA06B5S6CIFYtQ48h2+yhDBaKzbKhn/f00b+T8=";
         };
       };
 
